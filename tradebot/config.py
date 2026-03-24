@@ -19,15 +19,19 @@ def _str(key: str, default: str = "") -> str:
     return os.getenv(key, default).strip()
 
 
+def _bool(key: str, default: bool = False) -> bool:
+    return os.getenv(key, str(default)).strip().lower() in ("1", "true", "yes")
+
+
 @dataclass
 class Config:
-    exchange: str = field(default_factory=lambda: _str("EXCHANGE", "binance"))
+    exchange: str = field(default_factory=lambda: _str("EXCHANGE", "kraken"))
     api_key: str = field(default_factory=lambda: _str("API_KEY"))
     api_secret: str = field(default_factory=lambda: _str("API_SECRET"))
     mode: str = field(default_factory=lambda: _str("MODE", "paper").lower())
 
     symbols: List[str] = field(
-        default_factory=lambda: [s.strip() for s in _str("SYMBOLS", "BTC/USDT").split(",")]
+        default_factory=lambda: [s.strip() for s in _str("SYMBOLS", "BTC/USD").split(",")]
     )
 
     capital: float = field(default_factory=lambda: _float("CAPITAL", 10000))
@@ -50,6 +54,27 @@ class Config:
     poll_interval: int = field(default_factory=lambda: _int("POLL_INTERVAL", 30))
     ohlcv_limit: int = field(default_factory=lambda: _int("OHLCV_LIMIT", 200))
 
+    # ── Staleness / slippage guards ─────────────────────────────────────────
+    # How old the last candle can be before we refuse to trade (seconds).
+    # For a 5m timeframe, 2 closed candles = 600s is a reasonable ceiling.
+    candle_stale_seconds: int = field(
+        default_factory=lambda: _int("CANDLE_STALE_SECONDS", 600)
+    )
+    # Max allowed (ask-bid)/mid spread as a fraction.  0.005 = 0.5 %.
+    max_spread_pct: float = field(
+        default_factory=lambda: _float("MAX_SPREAD_PCT", 0.005)
+    )
+
+    # ── Paper → live gate ───────────────────────────────────────────────────
+    # Minimum number of *closed* paper trades before live mode is allowed.
+    min_paper_trades_for_live: int = field(
+        default_factory=lambda: _int("MIN_PAPER_TRADES_FOR_LIVE", 20)
+    )
+    # Must be explicitly set to true in .env to unlock live mode.
+    live_acknowledged: bool = field(
+        default_factory=lambda: _bool("LIVE_ACKNOWLEDGED", False)
+    )
+
     db_path: str = field(default_factory=lambda: _str("DB_PATH", "data/tradebot.db"))
     log_path: str = field(default_factory=lambda: _str("LOG_PATH", "data/trades.jsonl"))
     health_port: int = field(default_factory=lambda: _int("HEALTH_PORT", 8765))
@@ -61,9 +86,15 @@ class Config:
         assert 0 < self.max_daily_loss <= 0.10, "MAX_DAILY_LOSS must be 0–10%"
         assert 0 < self.max_exposure <= 1.0, "MAX_EXPOSURE must be 0–100%"
         assert self.max_positions >= 1
+        assert self.candle_stale_seconds > 0
+        assert 0 < self.max_spread_pct < 0.10, "MAX_SPREAD_PCT must be < 10%"
         if self.mode == "live":
-            assert self.api_key and self.api_secret, "API_KEY and API_SECRET required for live mode"
-        print(f"[config] mode={self.mode} capital={self.capital} symbols={self.symbols}")
+            assert self.api_key and self.api_secret, \
+                "API_KEY and API_SECRET required for live mode"
+        print(
+            f"[config] mode={self.mode} capital={self.capital} "
+            f"symbols={self.symbols} exchange={self.exchange}"
+        )
 
 
 CFG = Config()

@@ -2,12 +2,12 @@
 import json
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from config import CFG
 
 
 def _now() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
 
 
 def _write(record: dict) -> None:
@@ -18,7 +18,7 @@ def _write(record: dict) -> None:
 
 def _console(level: str, msg: str, extra: dict = None) -> None:
     tag = {"INFO": "·", "WARN": "⚠", "ERROR": "✖", "TRADE": "🔁", "RISK": "🛑"}.get(level, "?")
-    ts = datetime.utcnow().strftime("%H:%M:%S")
+    ts = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%H:%M:%S")
     suffix = "  " + json.dumps(extra) if extra else ""
     print(f"[{ts}] {tag} {msg}{suffix}", flush=True)
 
