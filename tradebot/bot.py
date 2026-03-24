@@ -234,6 +234,8 @@ async def main() -> None:
         logger.error(f"STARTUP ABORTED — readiness check failed: {ready_reason}")
         await ex.close()
         return
+    active_ex = getattr(ex, "active_exchange", CFG.exchange)
+    logger.info(f"Readiness OK — active exchange: {active_ex}  ({ready_reason})")
 
     # ── Register exchange with health module ──────────────────────────────────
     health.register_exchange(ex)

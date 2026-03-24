@@ -10,6 +10,7 @@ Public interface:
   await ex.place_order(symbol, side, size, price) -> {"id","price","filled"}
   await ex.readiness_check()                      -> (ok: bool, reason: str)
   ex.equity                                       -> float
+  ex.active_exchange                              -> str  (paper only)
   await ex.close()
 """
 
@@ -19,6 +20,10 @@ from config import CFG
 import logger
 
 _RETRY_DELAYS = (1, 2, 4)  # seconds between attempts 1→2, 2→3, 3→fail
+
+# Paper mode: try these exchanges in order until one responds.
+# All support BTC/USD, ETH/USD public OHLCV without auth.
+_PAPER_FALLBACKS = ["kraken", "coinbase", "bitstamp"]
 
 
 async def _with_retry(coro_fn, label: str):
@@ -41,31 +46,128 @@ async def _with_retry(coro_fn, label: str):
     raise last_exc
 
 
+def _build_aiohttp_session():
+    """
+    Return an aiohttp ClientSession that uses the threaded (system) DNS
+    resolver instead of aiodns/c-ares.
+
+    On Android/Termux, aiodns can fail with "Could not contact DNS servers"
+    because c-ares doesn't respect the Android DNS stack.  ThreadedResolver
+    delegates to the OS getaddrinfo(), which always works.
+
+    ccxt respects the 'session' key in its config dict and will NOT close
+    an externally-supplied session when exchange.close() is called
+    (own_session=False), so we manage its lifetime ourselves.
+    """
+    import aiohttp
+    try:
+        resolver  = aiohttp.resolver.ThreadedResolver()
+        connector = aiohttp.TCPConnector(resolver=resolver)
+        session   = aiohttp.ClientSession(connector=connector)
+        logger.info("DNS: using ThreadedResolver (system getaddrinfo)")
+        return session
+    except Exception as e:
+        # If something goes wrong building the custom session, log and
+        # return None — ccxt will create its own session as normal.
+        logger.warn("DNS: ThreadedResolver setup failed, using ccxt default", err=str(e))
+        return None
+
+
+def _make_ccxt(exchange_id: str, session=None):
+    """Instantiate a ccxt async exchange, optionally injecting an aiohttp session."""
+    cls    = getattr(ccxt, exchange_id)
+    params = {"enableRateLimit": True}
+    if session is not None:
+        params["session"] = session
+    return cls(params)
+
+
 class PaperExchange:
-    """Real public market data + simulated fills."""
+    """
+    Real public market data + simulated fills.
+
+    readiness_check() does two things:
+      1. Creates an aiohttp session with ThreadedResolver (avoids aiodns on Termux).
+      2. Tries CFG.exchange first, then _PAPER_FALLBACKS in order, using the
+         first one that successfully returns candle data.
+    All subsequent fetch calls use the selected exchange + session.
+    """
 
     def __init__(self):
-        cls = getattr(ccxt, CFG.exchange)
-        self._ex = cls({"enableRateLimit": True})
-        self.equity = CFG.capital
-        self._order_counter = 0
+        self._ex             = _make_ccxt(CFG.exchange)
+        self._session        = None   # set in readiness_check
+        self.active_exchange = CFG.exchange
+        self.equity          = CFG.capital
+        self._order_counter  = 0
 
     async def readiness_check(self) -> tuple[bool, str]:
-        """Fetch one candle to confirm exchange connectivity."""
-        try:
-            symbol = CFG.symbols[0]
-            data = await self._ex.fetch_ohlcv(symbol, CFG.timeframe, limit=1)
-            if not data:
-                return False, f"no candle data returned for {symbol}"
-            return True, "ok"
-        except Exception as e:
-            return False, f"exchange connectivity failed: {e}"
+        """
+        Try CFG.exchange, then fallbacks.
+        Injects a ThreadedResolver aiohttp session into the selected instance.
+        """
+        session = _build_aiohttp_session()
+        self._session = session  # may be None if build failed
+
+        # Candidate list: configured exchange first, then the rest of
+        # _PAPER_FALLBACKS that aren't already first.
+        candidates = [CFG.exchange] + [
+            x for x in _PAPER_FALLBACKS if x != CFG.exchange
+        ]
+
+        # Use BTC/USD as the probe symbol — available on all three fallbacks.
+        probe_symbol = "BTC/USD"
+        probe_tf     = CFG.timeframe
+
+        failures: list[str] = []
+
+        for exchange_id in candidates:
+            # (Re)create instance, injecting session each time so it uses
+            # our ThreadedResolver even on the first candidate.
+            try:
+                await self._ex.close()
+            except Exception:
+                pass
+            self._ex = _make_ccxt(exchange_id, session=session)
+
+            try:
+                data = await self._ex.fetch_ohlcv(probe_symbol, probe_tf, limit=1)
+                if not data:
+                    reason = f"{exchange_id}: fetch returned empty list"
+                    logger.warn(f"paper readiness: {reason}")
+                    failures.append(reason)
+                    continue
+
+                # Success
+                self.active_exchange = exchange_id
+                if exchange_id != CFG.exchange:
+                    logger.info(
+                        f"paper: selected fallback exchange '{exchange_id}' "
+                        f"(configured '{CFG.exchange}' failed: "
+                        f"{'; '.join(failures)})"
+                    )
+                else:
+                    logger.info(f"paper: exchange '{exchange_id}' ready")
+                return True, f"ok (exchange={exchange_id})"
+
+            except Exception as e:
+                reason = f"{exchange_id}: {str(e)[:100]}"
+                logger.warn(f"paper readiness probe failed — {reason}")
+                failures.append(reason)
+
+        # All candidates exhausted
+        if session:
+            try:
+                await session.close()
+            except Exception:
+                pass
+            self._session = None
+        return False, f"all exchange candidates failed: {failures}"
 
     async def fetch_ohlcv(self, symbol: str, timeframe: str, limit: int) -> list:
         try:
             return await _with_retry(
                 lambda: self._ex.fetch_ohlcv(symbol, timeframe, limit=limit),
-                f"fetch_ohlcv({symbol})",
+                f"fetch_ohlcv({symbol}@{self.active_exchange})",
             )
         except Exception as e:
             logger.error("fetch_ohlcv failed after retries", symbol=symbol, err=str(e)[:120])
@@ -75,7 +177,7 @@ class PaperExchange:
         try:
             t = await _with_retry(
                 lambda: self._ex.fetch_ticker(symbol),
-                f"fetch_ticker({symbol})",
+                f"fetch_ticker({symbol}@{self.active_exchange})",
             )
             return {
                 "last": t["last"],
@@ -100,6 +202,12 @@ class PaperExchange:
 
     async def close(self) -> None:
         await self._ex.close()
+        # Close our manually-managed aiohttp session (ccxt won't, own_session=False)
+        if self._session is not None and not self._session.closed:
+            try:
+                await self._session.close()
+            except Exception:
+                pass
 
 
 class LiveExchange:
