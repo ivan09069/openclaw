@@ -1,0 +1,8 @@
+# Install with: pip install --no-deps -r requirements.txt
+# (--no-deps avoids coincurve build failure on Termux/ARM)
+ccxt>=4.2.0
+pandas>=2.0.0
+pandas-ta>=0.3.14b
+python-dotenv>=1.0.0
+aiohttp>=3.9.0
+aiosqlite>=0.20.0
