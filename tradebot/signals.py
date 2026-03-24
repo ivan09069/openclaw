@@ -1,75 +1,97 @@
-"""signals.py — EMA crossover + RSI filter + ATR for SL/TP/sizing
+"""signals.py — EMA crossover + RSI filter + ATR  (pure pandas, no pandas_ta)
 
-Signal logic:
-  LONG  when EMA_fast crosses ABOVE EMA_slow AND RSI > rsi_long_threshold
-  SHORT when EMA_fast crosses BELOW EMA_slow AND RSI < rsi_short_threshold
-  Flat  otherwise
+EMA:  standard exponential moving average (adjust=False)
+RSI:  Wilder smoothing (equivalent to EMA with alpha=1/period)
+ATR:  Wilder smoothing of true-range
 
-Returns:
-  {
-    "signal":  "long" | "short" | "flat",
-    "price":   float,   # close of last candle
-    "atr":     float,   # ATR(14) of last candle
-    "rsi":     float,
-    "ema_fast": float,
-    "ema_slow": float,
-  }
+Signal:
+  LONG  — EMA_fast crosses above EMA_slow AND RSI > rsi_long_threshold
+  SHORT — EMA_fast crosses below EMA_slow AND RSI < rsi_short_threshold
+  FLAT  — otherwise
 """
 
 import pandas as pd
-import pandas_ta as ta
 from config import CFG
 import logger
 
 
+# ── Indicators ────────────────────────────────────────────────────────────────
+
+def _ema(s: pd.Series, period: int) -> pd.Series:
+    return s.ewm(span=period, adjust=False).mean()
+
+
+def _rsi(close: pd.Series, period: int) -> pd.Series:
+    delta = close.diff()
+    gain  = delta.clip(lower=0)
+    loss  = (-delta).clip(lower=0)
+    alpha = 1.0 / period
+    avg_gain = gain.ewm(alpha=alpha, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=alpha, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, float("nan"))
+    return 100 - (100 / (1 + rs))
+
+
+def _atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int) -> pd.Series:
+    prev_close = close.shift(1)
+    tr = pd.concat([
+        high - low,
+        (high - prev_close).abs(),
+        (low  - prev_close).abs(),
+    ], axis=1).max(axis=1)
+    alpha = 1.0 / period
+    return tr.ewm(alpha=alpha, adjust=False).mean()
+
+
+# ── Main entry ────────────────────────────────────────────────────────────────
+
 def compute(ohlcv: list) -> dict:
     """
     ohlcv: list of [timestamp_ms, open, high, low, close, volume]
-    Must have at least CFG.ema_slow + CFG.atr_period + 5 rows.
+    Returns signal dict.
     """
-    if len(ohlcv) < CFG.ema_slow + CFG.atr_period + 5:
-        logger.warn("signals: not enough candles", count=len(ohlcv))
+    min_rows = max(CFG.ema_slow, CFG.rsi_period, CFG.atr_period) + 10
+    if len(ohlcv) < min_rows:
+        logger.warn("signals: not enough candles", count=len(ohlcv), need=min_rows)
         return _flat(0.0)
 
     df = pd.DataFrame(ohlcv, columns=["ts", "open", "high", "low", "close", "volume"])
-    df = df.astype({"open": float, "high": float, "low": float, "close": float, "volume": float})
+    df = df.astype({"open": float, "high": float, "low": float,
+                    "close": float, "volume": float})
 
-    # Indicators
-    df["ema_fast"] = ta.ema(df["close"], length=CFG.ema_fast)
-    df["ema_slow"] = ta.ema(df["close"], length=CFG.ema_slow)
-    df["rsi"]      = ta.rsi(df["close"], length=CFG.rsi_period)
-    atr_series     = ta.atr(df["high"], df["low"], df["close"], length=CFG.atr_period)
-    df["atr"]      = atr_series
+    df["ema_fast"] = _ema(df["close"], CFG.ema_fast)
+    df["ema_slow"] = _ema(df["close"], CFG.ema_slow)
+    df["rsi"]      = _rsi(df["close"], CFG.rsi_period)
+    df["atr"]      = _atr(df["high"], df["low"], df["close"], CFG.atr_period)
 
     df.dropna(inplace=True)
     if len(df) < 2:
         logger.warn("signals: insufficient data after dropna")
         return _flat(0.0)
 
-    last  = df.iloc[-1]
-    prev  = df.iloc[-2]
+    last = df.iloc[-1]
+    prev = df.iloc[-2]
 
-    price    = float(last["close"])
-    atr      = float(last["atr"])
-    rsi      = float(last["rsi"])
-    ef_now   = float(last["ema_fast"])
-    es_now   = float(last["ema_slow"])
-    ef_prev  = float(prev["ema_fast"])
-    es_prev  = float(prev["ema_slow"])
+    price   = float(last["close"])
+    atr     = float(last["atr"])
+    rsi     = float(last["rsi"])
+    ef_now  = float(last["ema_fast"])
+    es_now  = float(last["ema_slow"])
+    ef_prev = float(prev["ema_fast"])
+    es_prev = float(prev["ema_slow"])
 
-    # Cross detection
     crossed_up   = ef_prev <= es_prev and ef_now > es_now
     crossed_down = ef_prev >= es_prev and ef_now < es_now
 
     if crossed_up and rsi > CFG.rsi_long_threshold:
-        sig = "long"
+        signal = "long"
     elif crossed_down and rsi < CFG.rsi_short_threshold:
-        sig = "short"
+        signal = "short"
     else:
-        sig = "flat"
+        signal = "flat"
 
     return {
-        "signal":   sig,
+        "signal":   signal,
         "price":    price,
         "atr":      atr,
         "rsi":      round(rsi, 2),
@@ -78,8 +100,7 @@ def compute(ohlcv: list) -> dict:
     }
 
 
-def sl_tp(signal: str, price: float, atr: float) -> tuple[float, float]:
-    """Return (stop_loss, take_profit) prices."""
+def sl_tp(signal: str, price: float, atr: float) -> tuple:
     sl_dist = atr * CFG.atr_sl_mult
     tp_dist = atr * CFG.atr_tp_mult
     if signal == "long":
@@ -90,5 +111,5 @@ def sl_tp(signal: str, price: float, atr: float) -> tuple[float, float]:
 
 
 def _flat(price: float) -> dict:
-    return {"signal": "flat", "price": price, "atr": 0.0, "rsi": 0.0,
-            "ema_fast": 0.0, "ema_slow": 0.0}
+    return {"signal": "flat", "price": price, "atr": 0.0,
+            "rsi": 0.0, "ema_fast": 0.0, "ema_slow": 0.0}
