@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "updatedAt": "2026-04-13T19:14:01.550Z",
+  "entries": {
+    "memory:memory/2026-03-18.md:16:39": {
+      "key": "memory:memory/2026-03-18.md:16:39",
+      "path": "memory/2026-03-18.md",
+      "startLine": 16,
+      "endLine": 39,
+      "source": "memory",
+      "snippet": "- **Installed:** `clawscan` and `clawsec-suite` into `/data/data/com.termux/files/usr/lib/node_modules/openclaw/skills/` - `tradr` and `crypto-trading-bot` do NOT exist on ClawHub - Binance Skills Hub: install via `npx clawhub install binance-skills-hub`, slug `binance-skills-hub` ### Wallet Inventory (~17:12–19:41 UTC) - Ivan showed a wallet screenshot: `tjomi.base.eth` — later said to disregard it (removed from USER.md) - Ivan wants to aggregate/inventory all his wallets — \"so many\" wallets - Built `~/lobsterboy/wallet_inventory.py` — scans EVM chains, DeBank tokens, CoinGecko prices, CSV/JSON output - Ivan said entering addresses one by one is not acceptable - Built `~/lobsterboy/keyhunt",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.0000026754048423843567,
+      "maxScore": 0.0000017740240445818168,
+      "firstRecalledAt": "2026-04-12T08:46:24.701Z",
+      "lastRecalledAt": "2026-04-13T19:14:01.550Z",
+      "queryHashes": [
+        "527a13fd4f0c",
+        "8df3942331a4"
+      ],
+      "recallDays": [
+        "2026-04-12",
+        "2026-04-13"
+      ],
+      "conceptTags": [
+        "clawsec-suite",
+        "crypto-trading-bot",
+        "binance-skills-hub",
+        "tjomi.base.eth",
+        "user.md",
+        "aggregate/inventory",
+        "lobsterboy/wallet-inventory.py",
+        "csv/json"
+      ]
+    },
+    "memory:memory/2026-03-18.md:32:41": {
+      "key": "memory:memory/2026-03-18.md:32:41",
+      "path": "memory/2026-03-18.md",
+      "startLine": 32,
+      "endLine": 41,
+      "source": "memory",
+      "snippet": "- `eth-account` 0.13.7 installed, along with full dependency tree - `aiohttp` already installed - Ivan's wallet on Base chain (tjomi.base.eth disregarded per his request) ### Ivan Context - Actively building toward agentic crypto trading - Has many wallets, wants automated discovery/aggregation - Pragmatic — doesn't want manual processes - Was previously doing wallet recovery/scanning work (saw vault probes, TrustWallet keystore checks in earlier screenshot)",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.0000030155597641725835,
+      "maxScore": 0.0000016699001240502783,
+      "firstRecalledAt": "2026-04-12T08:46:24.701Z",
+      "lastRecalledAt": "2026-04-13T19:14:01.550Z",
+      "queryHashes": [
+        "527a13fd4f0c",
+        "8df3942331a4"
+      ],
+      "recallDays": [
+        "2026-04-12",
+        "2026-04-13"
+      ],
+      "conceptTags": [
+        "eth-account",
+        "0.13.7",
+        "tjomi.base.eth",
+        "discovery/aggregation",
+        "recovery/scanning",
+        "eth",
+        "account",
+        "installed"
+      ]
+    },
+    "memory:memory/2026-03-18.md:1:21": {
+      "key": "memory:memory/2026-03-18.md:1:21",
+      "path": "memory/2026-03-18.md",
+      "startLine": 1,
+      "endLine": 21,
+      "source": "memory",
+      "snippet": "## Session: 2026-03-18 (afternoon/evening) ### LobsterBoy Project (~10:00–10:20 UTC) - Ivan said \"Go\" on the full LobsterBoy trading ecosystem build - Planned 3-contract architecture: LBToken.sol (ERC-20, 1B supply, 1% tax, anti-whale), AgentVault.sol (whitelisted agent executor), Treasury.sol (buyback+burn distribution) - Trading engine: Python, ccxt, trend/funding/sentiment agents, coordinator, risk layer, paper trading mode - Build target: Base chain, Hardhat, `~/lobsterboy/` - Claude Code build failed twice: `claude` binary uses `/usr/bin/env` shebang — must invoke via `~/.openclaw-android/node/bin/node /data/data/com.termux/files/usr/bin/claude` - Same issue with `openclaw` and `clawd",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.0000012484313018594372,
+      "maxScore": 0.0000012484313018594372,
+      "firstRecalledAt": "2026-04-12T08:46:24.701Z",
+      "lastRecalledAt": "2026-04-12T08:46:24.701Z",
+      "queryHashes": [
+        "527a13fd4f0c"
+      ],
+      "recallDays": [
+        "2026-04-12"
+      ],
+      "conceptTags": [
+        "afternoon/evening",
+        "3-contract",
+        "lbtoken.sol",
+        "erc-20",
+        "anti-whale",
+        "agentvault.sol",
+        "treasury.sol",
+        "trend/funding/sentiment"
+      ]
+    }
+  }
+}
