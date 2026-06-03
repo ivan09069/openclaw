@@ -45,6 +45,8 @@ env:
 
 jobs:
   preflight:
+    # Skip upstream-only scheduled cron on forks.
+    if: github.repository == 'openclaw/openclaw' || github.event_name != 'schedule'
     runs-on: ubuntu-24.04
     outputs:
       docs_only: ${{ steps.manifest.outputs.docs_only }}

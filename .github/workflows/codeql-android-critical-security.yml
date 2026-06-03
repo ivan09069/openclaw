@@ -20,6 +20,8 @@ permissions:
 jobs:
   android:
     name: Critical Security (android)
+    # Skip upstream-only scheduled cron on forks.
+    if: github.repository == 'openclaw/openclaw' || github.event_name != 'schedule'
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 45
     steps:

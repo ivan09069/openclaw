@@ -20,6 +20,8 @@ permissions:
 jobs:
   macos:
     name: Critical Security (macOS)
+    # Skip upstream-only scheduled cron on forks.
+    if: github.repository == 'openclaw/openclaw' || github.event_name != 'schedule'
     runs-on: blacksmith-6vcpu-macos-latest
     timeout-minutes: 45
     steps:

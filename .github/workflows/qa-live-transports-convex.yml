@@ -59,6 +59,8 @@ env:
 jobs:
   authorize_actor:
     name: Authorize workflow actor
+    # Skip upstream-only scheduled cron on forks.
+    if: github.repository == 'openclaw/openclaw' || github.event_name != 'schedule'
     runs-on: blacksmith-8vcpu-ubuntu-2404
     outputs:
       authorized: ${{ steps.permission.outputs.authorized }}
