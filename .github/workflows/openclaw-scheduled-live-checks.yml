@@ -20,6 +20,8 @@ env:
 
 jobs:
   live_and_openwebui_checks:
+    # Skip upstream-only scheduled cron on forks.
+    if: github.repository == 'openclaw/openclaw' || github.event_name != 'schedule'
     permissions:
       actions: read
       contents: read
